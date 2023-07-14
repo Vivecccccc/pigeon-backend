@@ -9,6 +9,7 @@ router = APIRouter()
 @router.post("/search")
 async def departure(data: SearchData):
     if data.type == SearchType.TEXT:
-        _ = extract_entry(data.content, closed=False)
+        focuses = extract_entry(data.content, closed=True, excluded_types=["位置", "菜品"])
     else:
-        pass
+        raise NotImplementedError
+    return focuses

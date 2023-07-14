@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, root_validator
 from typing import List, Optional
 
 class Loc(BaseModel):
@@ -12,13 +12,13 @@ class Focus(BaseModel):
 class FocusLoc(Focus):
     loc: Optional[Loc]
 
-    @model_validator
-    def _flag_loc_check(cls, ins: "FocusLoc"):
-        if ins.loc is None:
-            ins.flag = False
+    @root_validator
+    def _flag_loc_check(cls, val):
+        if val.get("loc") is None:
+            val["flag"] = False
             # TODO
             # ins.searched = False
-        return ins
+        return val
 
 class Preflight(BaseModel):
     focuses: List[FocusLoc]

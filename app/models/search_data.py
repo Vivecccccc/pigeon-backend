@@ -1,5 +1,5 @@
 from fastapi import UploadFile
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, root_validator, validator
 from enum import Enum
 from typing import List, Optional, Union
 
@@ -17,7 +17,7 @@ class SearchData(BaseModel):
     # TODO
     preset_scope: Optional[List[str]]
 
-    @field_validator("content")
+    @validator("content")
     def _uploadfile_is_img(cls, val):
         if isinstance(val, str):
             return val
@@ -25,15 +25,15 @@ class SearchData(BaseModel):
             raise ValueError("input file type not accepted")
         return val
     
-    @model_validator(mode="before")
-    def _content_type_match_type(cls, ins: "SearchData"):
-        type, content = ins.type, ins.content
+    @root_validator(pre=True)
+    def _content_type_match_type(cls, val):
+        type, content = val.get("type"), val.get("content")
         if type is None or content is None:
             raise ValueError("nonetype was passed")
-        if (type == SearchType.TEXT ^ isinstance(content, str)) == 1 \
-        or (type == SearchType.IMG ^ isinstance(content, UploadFile)) == 1:
+        if ((type == SearchType.TEXT.value) ^ isinstance(content, str)) == 1 \
+        or ((type == SearchType.IMG.value) ^ isinstance(content, UploadFile)) == 1:
             raise ValueError("input type does not match")
-        return ins
+        return val
     
 class AppendData(BaseModel):
     focuses: List[Focus]

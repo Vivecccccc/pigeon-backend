@@ -1,0 +1,21 @@
+{
+  "task_type": "entity_extraction",
+  "label_maps": {
+    "entity2id": {
+      "餐厅": 0,
+      "位置": 1,
+      "菜品": 2
+    },
+    "schema": [
+      "餐厅",
+      "位置",
+      "菜品"
+    ],
+    "id2entity": {
+      "0": "餐厅",
+      "1": "位置",
+      "2": "菜品"
+    }
+  },
+  "encoder": "ernie-3.0-mini-zh"
+}
