@@ -6,6 +6,7 @@ import onnxruntime as ort
 from typing import List, Optional
 from scipy.special import softmax
 from paddlenlp.transformers import AutoTokenizer
+from locate import estimate_scope
 
 from models.flight_data import Focus
 from models.utils import Entity
@@ -41,7 +42,10 @@ def extract_entry(text: str, closed: bool = False, **kwargs) -> List[Focus]:
         entities = _closed_extract(text)
     else:
         entities = _opened_extract(text)
-    return _postprocessing(entities, excludes=kwargs.get("excluded_types", []))
+    emerged_loc = [ent["text"] for _, ent_list in entities for ent in ent_list if ent["type"] == "位置"]
+    assume_scope = estimate_scope(emerged_loc)
+    focuses = _postprocessing(entities, excludes=kwargs.get("excluded_types", []))
+    return 
 
 def _closed_extract(text: str) -> List:
     chunks = _chunkify(text, CLOSED_EXTRACT_SEQ_LEN)
@@ -98,12 +102,21 @@ def _postprocessing(batch_results, excludes: List[str]) -> List[Focus]:
                 continue
             start, end = ent["start_index"], ent["end_index"]
             ent_loc = ent_loc.union(set(range(start, end)))
-        for i, token in enumerate(text):
-            if token.isspace():
+        token = []
+        flag = True
+        for i, char in enumerate(text):
+            if not char.isspace():
+                token.append(char)
+                flag &= (i in ent_loc)
                 continue
-            focus = Focus(elem=token, flag=False)
-            if i in ent_loc:
-                focus.flag = True
+            focus = Focus(elem="".join(token),
+                          flag=flag)
+            focuses.append(focus)
+            token = []
+            flag = True
+        if len(token) != 0:
+            focus = Focus(elem="".join(token),
+                          flag=flag)
             focuses.append(focus)
     return focuses
 
