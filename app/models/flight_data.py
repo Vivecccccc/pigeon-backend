@@ -8,6 +8,7 @@ class Loc(BaseModel):
 class Focus(BaseModel):
     elem: str
     flag: bool
+    begin: bool
 
 class FocusLoc(Focus):
     loc: Optional[Loc]

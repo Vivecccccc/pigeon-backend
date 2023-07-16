@@ -1,5 +1,6 @@
 import os
 import requests
+import concurrent.futures
 from typing import List
 
 from models.flight_data import Focus
@@ -10,20 +11,17 @@ ABOVE_AVG_MAXIMUM_CITIES = 3
 
 def estimate_scope(loc_list: List[str]) -> List[str]:
     endpoint = "https://restapi.amap.com/v5/geocode/geo"
-    params = {"key": AMAP_API_KEY}
+    est_params = []
     scores = {}
     for loc in loc_list:
         loc = loc.replace(" ", "")
-        params["address"] = loc
-        response = None
-        try:
-            response = requests.get(endpoint, params)
-        except Exception as e:
-            raise e
-        if response is None or response["status"] == "0":
-            continue
-        geo_data = response["geocodes"][0]
-        scope_level, city = geo_data["level"], geo_data["city"]
+        est_params.append(loc)
+    est_results = None
+    with concurrent.futures.ThreadPoolExecutor() as estimator:
+        est_results = estimator.map(lambda x: _estimate_scope(x), est_params)
+    # if est_results is not None:
+    #     est_results = list(est_results)
+    for scope_level, city in est_results:
         if isinstance(city, list) and len(city) == 0:
             continue
         curr_city_score = scores.get(city, 0)
@@ -36,11 +34,46 @@ def estimate_scope(loc_list: List[str]) -> List[str]:
         return []
     scores_sum = sum([x[1] for x in scores])
     scores_avg = scores_sum / len(scores)
-    median = scores_sum[-1] // 2
-    if scores_sum[0] >= median:
+    median = scores_sum // 2
+    if scores[0][1] >= median:
         return [scores[0][0]]
     return [x[0] for x in scores if x[1] > scores_avg][:ABOVE_AVG_MAXIMUM_CITIES]
 
-def fetch_location(focuses: List[Focus], scope: List[str]):
+def fetch_location(focuses: List[Focus], scopes: List[str]):
     endpoint = "https://restapi.amap.com/v3/place/text"
     params = {"key": AMAP_API_KEY}
+    begins = [i for i, focus in enumerate(focuses) if focus.begin]
+    fragments = [focuses[i:j] for i, j in zip(begins, begins[1:] + [len(focuses)])]
+    fragments = [list(filter(lambda focus: focus.flag, fragment)) for fragment in fragments]
+    entities = {"".join([focus.elem for focus in fragment]): fragment for fragment in fragments}
+    est_params = [(name, city) for name in entities.keys() for city in scopes]
+    est_results = None
+    with concurrent.futures.ThreadPoolExecutor() as estimator:
+        est_results = estimator.map(lambda x: _estimate_location(*x), est_params)
+    if est_results is not None:
+        est_results = list(est_results)
+    print(est_results)
+
+def _estimate_location(query: str, scope: str):
+    endpoint = "https://restapi.amap.com/v3/assistant/inputtips"
+    params = {"key": AMAP_API_KEY,
+              "keywords": query,
+              "city": scope,
+              "citylimit": True}
+    response = None
+    try:
+        response = requests.get(endpoint, params).json()
+    except Exception as e:
+        raise e
+    return response["tips"] if response is not None and response["status"] == "1" else []
+
+def _estimate_scope(address: str):
+    endpoint = "https://restapi.amap.com/v5/geocode/geo"
+    params = {"key": AMAP_API_KEY,
+              "address": address}
+    response = None
+    try:
+        response = requests.get(endpoint, params).json()
+    except Exception as e:
+        raise e
+    return response["geocodes"][0]["level"], response["geocodes"][0]["city"] if response is not None and response["status"] == "1" else None
