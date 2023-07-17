@@ -8,7 +8,7 @@ from scipy.special import softmax
 from paddlenlp.transformers import AutoTokenizer
 from utils.locate import fetch_location
 
-from utils.locate import estimate_scope
+from utils.locate import estimate_scope_and_anchors
 from models.flight_data import Focus
 from models.utils import Entity
 
@@ -38,17 +38,12 @@ label_maps = model_config["label_maps"]
 # schema = model_config["label_maps"]["schema"]
 # _set_schema(schema)
 
-def extract_entry(text: str, closed: bool = False, **kwargs) -> List[Focus]:
+def extract_entry(text: str, closed: bool = False) -> List:
     if closed:
         entities = _closed_extract(text)
     else:
         entities = _opened_extract(text)
-    emerged_loc = [ent["text"] for _, ent_list in entities for ent in ent_list if ent["type"] == "位置"]
-    print(emerged_loc)
-    assume_scope = estimate_scope(emerged_loc)
-    focuses = _postprocessing(entities, excludes=kwargs.get("excluded_types", []))
-    fetch_location(focuses, assume_scope)
-    return {"focuses": focuses, "assume_scope": assume_scope}
+    return entities
 
 def _closed_extract(text: str) -> List:
     chunks = _chunkify(text, CLOSED_EXTRACT_SEQ_LEN)
@@ -69,7 +64,7 @@ def _closed_extract(text: str) -> List:
     decoded = _decode_batch(batch_outputs, offset_mappings, chunks)
     return decoded
 
-def _opened_extract(text: str) -> List[Entity]:
+def _opened_extract(text: str) -> List:
     # TODO
     pass
 
@@ -94,43 +89,6 @@ def _decode_batch(batch_outputs, offset_mappings, texts):
             ent_list.append(ent)
         batch_ent_results.append((text, ent_list))
     return batch_ent_results
-
-def _postprocessing(batch_results, excludes: List[str]) -> List[Focus]:
-    focuses: List[Focus] = []
-    for text, ent_list in batch_results:
-        ent_loc = set()
-        ent_begin = set()
-        for ent in ent_list:
-            ent_type = ent["type"]
-            if ent_type in excludes:
-                continue
-            start, end = ent["start_index"], ent["end_index"]
-            ent_loc = ent_loc.union(set(range(start, end)))
-            ent_begin.add(start)
-        token = []
-        flag = True
-        span = set()
-        for i, char in enumerate(text):
-            if not char.isspace():
-                token.append(char)
-                flag &= (i in ent_loc)
-                span.add(i)
-                continue
-            has_begin = len(span.intersection(ent_begin)) != 0
-            focus = Focus(elem="".join(token),
-                            flag=flag,
-                            begin=has_begin)
-            focuses.append(focus)
-            token = []
-            flag = True
-            span = set()
-        if len(token) != 0:
-            has_begin = len(span.intersection(ent_begin)) != 0
-            focus = Focus(elem="".join(token),
-                            flag=flag,
-                            begin=has_begin)
-            focuses.append(focus)
-    return focuses
 
 def _chunkify(
         text: str,
